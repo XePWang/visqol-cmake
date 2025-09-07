@@ -1,3 +1,5 @@
+> **Note**: This version has been modified to use CMake instead of Bazel for building and is integrated as a submodule in the [audio-quality-assess](https://gitee.com/XePWang/audio-quality-assess) project. The original Bazel build instructions have been removed to avoid confusion.
+
 # ViSQOL
 
 ViSQOL (Virtual Speech Quality Objective Listener) is an objective, full-reference metric for perceived audio quality. It uses a spectro-temporal measure of similarity between a reference and a test speech signal to produce a MOS-LQO (Mean Opinion Score - Listening Quality Objective) score. MOS-LQO scores range from 1 (the worst) to 5 (the best).
@@ -37,32 +39,22 @@ ViSQOL was trained with data from subjective tests that roughly follow industry 
 - Single scores are not very meaningful.  Rather, treatments should be aggregated over several samples that have the same treatment.
 - The choice of audio mode vs speech mode can have large effects on the output.
 
-## Build
+## Build (CMake)
 
-#### Linux/Mac Build Instructions
-1. ##### Install Bazel
-- Bazel can be installed following the instructions for [Linux](https://bazel.build/install/ubuntu) or [Mac](https://bazel.build/install/os-x).
-- Tested with Bazel version `5.1.0`.
-2. ##### Install Numpy
-- Can be installed with `pip install numpy`
-2. ##### Build ViSQOL
-- Change directory to the root of the ViSQOL project (i.e. where the WORKSPACE file is) and run the following command: `bazel build :visqol -c opt`
+This version uses CMake for building.
 
-#### Windows Build Instructions (Experimental, last tested on Windows 10 x64, 2020 August)
+1.  **Install Dependencies**:
+    *   Ensure you have `build-essential` and `cmake` installed.
+    *   This project depends on `libgflags-dev` and `libsndfile1-dev`. Install them using your system's package manager (e.g., `sudo apt-get install libgflags-dev libsndfile1-dev`).
 
-1. ##### Install Bazel
-- Bazel can be installed for Windows from [here](https://bazel.build/install/windows).
-- Tested with Bazel version `5.1.0`.
-
-2. ##### Install git
-- `git` for Windows can be obtained from the [official git website](https://git-scm.com/downloads).
-- When installing, select the option that allows `git` to be accessed from the system shells.
-
-3. ##### Install Tensorflow dependencies
-- Follow the instructions detailed [here](https://www.tensorflow.org/install/source_windows) to install `tensorflow` build dependencies for windows.
-
-4. ##### Build ViSQOL:
-- Change directory to the root of the ViSQOL project (i.e. where the WORKSPACE file is) and run the following command: `bazel build :visqol -c opt`
+2.  **Build**:
+    ```bash
+    mkdir build
+    cd build
+    cmake ..
+    make
+    ```
+The executable `visqol` will be created in the `build` directory.
 
 ## Command Line Usage
 #### Note Regarding Usage
@@ -125,57 +117,30 @@ ViSQOL was trained with data from subjective tests that roughly follow industry 
 
   To compare two files and output their similarity to the console:
 
-##### Linux/Mac:
-- `./bazel-bin/visqol --reference_file ref1.wav --degraded_file deg1.wav --verbose`
-
-##### Windows:
-- `bazel-bin\visqol.exe --reference_file "ref1.wav" --degraded_file "deg1.wav" --verbose`
+- `./build/visqol --reference_file ref1.wav --degraded_file deg1.wav --verbose`
 
 ---
 
 To compare all reference-degraded file pairs in a CSV file, outputting the
 results to another file and also outputting additional "debug" information:
 
-##### Linux/Mac:
-- `./bazel-bin/visqol --batch_input_csv input.csv --results_csv results.csv
-    --output_debug debug.json`
-
-##### Windows:
-- `bazel-bin\visqol.exe --batch_input_csv "input.csv" --results_csv "results.csv" --output_debug "debug.json"`
+- `./build/visqol --batch_input_csv input.csv --results_csv results.csv --output_debug debug.json`
 
 ---
 
 To compare two files using scaled speech mode and output their similarity to the console:
-##### Linux/Mac:
-- `./bazel-bin/visqol --reference_file ref1.wav --degraded_file deg1.wav --use_speech_mode --verbose`
 
-##### Windows:
-- `bazel-bin\visqol.exe --reference_file "ref1.wav" --degraded_file "deg1.wav" --use_speech_mode --verbose`
+- `./build/visqol --reference_file ref1.wav --degraded_file deg1.wav --use_speech_mode --verbose`
 
 ---
 
 To compare two files using unscaled speech mode and output their similarity to the console:
-##### Linux/Mac:
-- `./bazel-bin/visqol --reference_file ref1.wav --degraded_file deg1.wav --use_speech_mode --use_unscaled_speech_mos_mapping --verbose`
 
-##### Windows:
-- `bazel-bin\visqol.exe --reference_file "ref1.wav" --degraded_file "deg1.wav" --use_speech_mode --use_unscaled_speech_mos_mapping --verbose`
+- `./build/visqol --reference_file ref1.wav --degraded_file deg1.wav --use_speech_mode --use_unscaled_speech_mos_mapping --verbose`
 
 ## C++ API Usage
 #### ViSQOL Integration
-To integrate ViSQOL with your Bazel project:
-1. Add ViSQOL to your WORKSPACE file as a local_repository:
-    ```
-    local_repository (
-        name = "visqol",
-        path = "/path/to/visqol",
-    )
-    ```
-2. Then in your project's BUILD file, add the ViSQOL library as a dependency to your binary/library dependency list:
-    ```
-    deps = ["@visqol//:visqol_lib"],
-    ```
-3. Note that Bazel does not currently resolve transitive dependencies (see [issue #2391](https://github.com/bazelbuild/bazel/issues/2391)). As a workaround, it is required that you copy the contents of the ViSQOL WORKSPACE file to your own project's WORKSPACE file until this is resolved.
+To integrate ViSQOL with your CMake project, you can use `add_subdirectory` to include it. Ensure that the necessary dependencies (gflags, sndfile) are found by your main project.
 
 #### Sample Program
 ```cpp
@@ -273,44 +238,7 @@ int main(int argc, char **argv) {
 }
 ```
 ## Python API Usage
-#### ViSQOL Installation
-From within the root directory install ViSQOL using pip.
-```
-pip install .
-```
-#### Sample Program
-```python
-import os
-
-from visqol import visqol_lib_py
-from visqol.pb2 import visqol_config_pb2
-from visqol.pb2 import similarity_result_pb2
-
-config = visqol_config_pb2.VisqolConfig()
-
-mode = "audio"
-if mode == "audio":
-    config.audio.sample_rate = 48000
-    config.options.use_speech_scoring = False
-    svr_model_path = "libsvm_nu_svr_model.txt"
-elif mode == "speech":
-    config.audio.sample_rate = 16000
-    config.options.use_speech_scoring = True
-    svr_model_path = "lattice_tcditugenmeetpackhref_ls2_nl60_lr12_bs2048_learn.005_ep2400_train1_7_raw.tflite"
-else:
-    raise ValueError(f"Unrecognized mode: {mode}")
-
-config.options.svr_model_path = os.path.join(
-    os.path.dirname(visqol_lib_py.__file__), "model", svr_model_path)
-
-api = visqol_lib_py.VisqolApi()
-
-api.Create(config)
-
-similarity_result = api.Measure(reference, degraded)
-
-print(similarity_result.moslqo)
-```
+This CMake version does not build the Python API. Please refer to the original repository for Python support.
 
 ## Dependencies
 
@@ -354,7 +282,7 @@ These three should serve as an overview:
 ## FAQ
 
 ### Why do I get compile error about undeclared inclusion(s) in rule '//:visqol_lib'?
-This may have to do with bazel being out of sync.  You may need to run `bazel clean --expunge` and rebuild.
+This error is specific to Bazel and does not apply to the CMake version. If you encounter build issues with CMake, ensure all dependencies (`libgflags-dev`, `libsndfile1-dev`) are correctly installed.
 
 ### Why are the MOS predictions on my files so bad?
 There are a number of possible explanations, here are the most common ones:
