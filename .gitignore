@@ -1,7 +1,6 @@
-/bazel-bin
-/bazel-genfiles
-/bazel-out
-/bazel-testlogs
-/bazel-visqol
-/visqol_lib_py
-.vscode
+# CMake build directories
+/build/
+/bin/
+
+# Editor configurations
+.vscode/
