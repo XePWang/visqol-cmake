@@ -4,6 +4,9 @@ project(visqol CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(TFLITE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tflite/include")
+set(TFLITE_LIB "${CMAKE_CURRENT_SOURCE_DIR}/tflite/lib/libtensorflowlite.so") # tflite库
+
 include(FetchContent)
 
 # 依赖项
@@ -56,6 +59,28 @@ FetchContent_MakeAvailable(pffft)
 add_library(pffft_lib "${pffft_SOURCE_DIR}/pffft.c")
 target_include_directories(pffft_lib PUBLIC "${pffft_SOURCE_DIR}")
 
+# 6.flatbuffers库
+FetchContent_Declare(
+  flatbuffers
+  GIT_REPOSITORY https://github.com/google/flatbuffers.git
+  GIT_TAG        v25.2.10
+)
+set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(FLATBUFFERS_INSTALL ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(flatbuffers)
+
+# 验证路径
+if(NOT EXISTS "${TFLITE_INCLUDE_DIR}/tensorflow/lite/model.h")
+  message(FATAL_ERROR "TensorFlow Lite model.h not found at ${TFLITE_INCLUDE_DIR}/tensorflow/lite/model.h")
+endif()
+
+if(NOT EXISTS "${TFLITE_LIB}")
+  message(FATAL_ERROR "TensorFlow Lite library not found at ${TFLITE_LIB}")
+endif()
+
+message(STATUS "Using TensorFlow Lite includes: ${TFLITE_INCLUDE_DIR}")
+message(STATUS "Using TensorFlow Lite library: ${TFLITE_LIB}")
+
 # Generate protobuf files
 file(GLOB PROTO_FILES "src/proto/*.proto")
 # 使用 FetchContent 提供的 protobuf 工具
@@ -79,15 +104,14 @@ foreach(proto_file ${PROTO_FILES})
     list(APPEND PROTO_HDRS ${proto_hdr})
 endforeach()
 
-# 收集源文件，排除 main.cc 和 tflite 相关文件
+# 收集源文件，只排除 main.cc
 file(GLOB VISQOL_LIB_SOURCES 
     "src/*.cc"
     "src/svr_training/*.cc"
 )
-# 排除 main.cc 和 tflite 相关文件（与 Bazel BUILD 文件一致）
+# 只排除 main.cc
 list(REMOVE_ITEM VISQOL_LIB_SOURCES 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/tflite_quality_mapper.cc"
 )
 
 # 创建 visqol 库
@@ -95,9 +119,6 @@ add_library(visqol_lib
     ${VISQOL_LIB_SOURCES}
     ${PROTO_SRCS}
 )
-
-# 定义编译宏来禁用 TensorFlow Lite 功能
-target_compile_definitions(visqol_lib PRIVATE NO_TFLITE)
 
 # 添加头文件目录
 target_include_directories(visqol_lib PUBLIC 
@@ -108,6 +129,7 @@ target_include_directories(visqol_lib PUBLIC
     "${CMAKE_CURRENT_BINARY_DIR}/src"  # for src/proto/xxx.pb.h
     "${libsvm_SOURCE_DIR}"
     "${pffft_SOURCE_DIR}"
+    ${TFLITE_INCLUDE_DIR}  # TensorFlow Lite 头文件路径
 )
 
 # 链接库的依赖项
@@ -122,6 +144,7 @@ target_link_libraries(visqol_lib PUBLIC
     libsvm_lib
     armadillo
     pffft_lib
+    ${TFLITE_LIB}  # TensorFlow Lite 库
     m
 )
 
