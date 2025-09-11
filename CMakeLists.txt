@@ -56,6 +56,32 @@ FetchContent_MakeAvailable(pffft)
 add_library(pffft_lib "${pffft_SOURCE_DIR}/pffft.c")
 target_include_directories(pffft_lib PUBLIC "${pffft_SOURCE_DIR}")
 
+# 6. TensorFlow Lite
+FetchContent_Declare(
+  tensorflow
+  GIT_REPOSITORY https://github.com/tensorflow/tensorflow.git
+  GIT_TAG        v2.13.0
+)
+set(TFLITE_ENABLE_XNNPACK ON CACHE BOOL "" FORCE)
+set(TFLITE_ENABLE_GPU OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(tensorflow)
+
+# 手动构建 TensorFlow Lite
+execute_process(
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${tensorflow_SOURCE_DIR}/tensorflow/lite/build
+)
+
+# 添加 TensorFlow Lite 子目录
+add_subdirectory(${tensorflow_SOURCE_DIR}/tensorflow/lite ${CMAKE_CURRENT_BINARY_DIR}/tensorflow-lite)
+
+# 如果上述方法失败，则使用预编译的方式
+if(NOT TARGET tensorflow-lite)
+  # 创建一个空的目标作为占位符
+  add_library(tensorflow-lite INTERFACE)
+  target_compile_definitions(tensorflow-lite INTERFACE NO_TFLITE)
+endif()
+
 # Generate protobuf files
 file(GLOB PROTO_FILES "src/proto/*.proto")
 # 使用 FetchContent 提供的 protobuf 工具
@@ -79,15 +105,14 @@ foreach(proto_file ${PROTO_FILES})
     list(APPEND PROTO_HDRS ${proto_hdr})
 endforeach()
 
-# 收集源文件，排除 main.cc 和 tflite 相关文件
+# 收集源文件，排除 main.cc
 file(GLOB VISQOL_LIB_SOURCES 
     "src/*.cc"
     "src/svr_training/*.cc"
 )
-# 排除 main.cc 和 tflite 相关文件（与 Bazel BUILD 文件一致）
+# 排除 main.cc（与 Bazel BUILD 文件一致）
 list(REMOVE_ITEM VISQOL_LIB_SOURCES 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/tflite_quality_mapper.cc"
 )
 
 # 创建 visqol 库
@@ -96,8 +121,12 @@ add_library(visqol_lib
     ${PROTO_SRCS}
 )
 
-# 定义编译宏来禁用 TensorFlow Lite 功能
-target_compile_definitions(visqol_lib PRIVATE NO_TFLITE)
+# 根据 TensorFlow Lite 是否可用来设置编译宏
+if(TARGET tensorflow-lite)
+    target_compile_definitions(visqol_lib PRIVATE TFLITE_AVAILABLE)
+else()
+    target_compile_definitions(visqol_lib PRIVATE NO_TFLITE)
+endif()
 
 # 添加头文件目录
 target_include_directories(visqol_lib PUBLIC 
@@ -109,6 +138,15 @@ target_include_directories(visqol_lib PUBLIC
     "${libsvm_SOURCE_DIR}"
     "${pffft_SOURCE_DIR}"
 )
+
+# 如果 TensorFlow Lite 可用，添加其头文件路径
+if(TARGET tensorflow-lite)
+    target_include_directories(visqol_lib PUBLIC 
+        "${tensorflow_SOURCE_DIR}"
+        "${tensorflow_SOURCE_DIR}/tensorflow/lite"
+        "${tensorflow_SOURCE_DIR}/tensorflow/lite/delegates"
+    )
+endif()
 
 # 链接库的依赖项
 target_link_libraries(visqol_lib PUBLIC
@@ -124,6 +162,11 @@ target_link_libraries(visqol_lib PUBLIC
     pffft_lib
     m
 )
+
+# 如果 TensorFlow Lite 可用，链接它
+if(TARGET tensorflow-lite)
+    target_link_libraries(visqol_lib PUBLIC tensorflow-lite)
+endif()
 
 # 创建可执行文件
 add_executable(visqol "src/main.cc")
